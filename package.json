@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"no build step, dist/index.js is hand-written plain JS\" && exit 0"
   },
-  "author": "Axel",
+  "author": "bloodshine",
   "license": "GPL-2.0-or-later",
   "dependencies": {
     "@decky/api": "^1.1.2"
