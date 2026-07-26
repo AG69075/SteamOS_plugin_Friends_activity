@@ -1,0 +1,16 @@
+{
+  "name": "friends-activity-bubble",
+  "version": "1.0.0",
+  "author": "Axel",
+  "flags": [],
+  "api_version": 2,
+  "publish": {
+    "tags": [
+      "steam",
+      "friends",
+      "clean-gameview"
+    ],
+    "description": "Floats a \"Friends recently played\" bubble over the Clean GameView hero art, sourced from the same Activity tab data.",
+    "image": ""
+  }
+}
