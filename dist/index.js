@@ -41,7 +41,10 @@ const STORAGE_KEY = 'friends-activity-bubble.settings';
 const POSITION_OPTIONS = [
     { value: 'top-right', label: 'Top right' },
     { value: 'top-left', label: 'Top left' },
-    { value: 'top-center', label: 'Top center' }
+    { value: 'top-center', label: 'Top center' },
+    { value: 'bottom-right', label: 'Bottom right' },
+    { value: 'bottom-left', label: 'Bottom left' },
+    { value: 'bottom-center', label: 'Bottom center' }
 ];
 const defaultSettings = {
     position: 'top-left',
@@ -81,67 +84,6 @@ const useSettings = () => {
     }, []);
     const setPartialSetting = SP_REACT.useCallback((partial) => { _setGlobal(partial); }, []);
     return { settings, setSetting: setPartialSetting };
-};
-
-// ─── Global "game launching" tracker ──────────────────────────────────────────
-// Registered ONCE at plugin mount (not per bubble-instance) so it survives the
-// bubble component being torn down/rebuilt frequently by route re-renders,
-// which was causing per-component registration to miss the real event.
-// actionName === 'LaunchApp' on GameActionStart is confirmed against the
-// HLTB for Deck plugin's compiled bundle. GameActionEnd's strAppId/actionName
-// were observed to come back undefined on this SteamOS version, so any End
-// event just clears the tracked appid (only one game launches at a time in
-// practice).
-let _launchingAppid = null;
-let _launchingSafetyTimer = null;
-const _launchListeners = new Set();
-const _notifyLaunchListeners = () => { _launchListeners.forEach((fn) => { try { fn(); } catch (_err) { /* ignore */ } }); };
-const _clearLaunching = () => {
-    if (_launchingSafetyTimer) { clearTimeout(_launchingSafetyTimer); _launchingSafetyTimer = null; }
-    _launchingAppid = null;
-    _notifyLaunchListeners();
-};
-
-const registerGameActionTracking = () => {
-    console.log('[friends-activity-bubble] registerGameActionTracking() called at plugin mount.');
-    let onStart, onEnd;
-    try {
-        onStart = window.SteamClient?.Apps?.RegisterForGameActionStart?.((_actionType, strAppId, actionName) => {
-            if (actionName !== 'LaunchApp') return;
-            _launchingAppid = parseInt(strAppId, 10);
-            console.log(`[friends-activity-bubble] (global) GameActionStart LaunchApp for ${_launchingAppid}`);
-            _notifyLaunchListeners();
-            // Safety net: GameActionEnd isn't always reliable (observed with
-            // undefined strAppId/actionName on some SteamOS versions), so
-            // never stay hidden longer than this even if End never fires.
-            if (_launchingSafetyTimer) clearTimeout(_launchingSafetyTimer);
-            _launchingSafetyTimer = setTimeout(() => {
-                console.log('[friends-activity-bubble] (global) launching safety timeout — clearing state.');
-                _clearLaunching();
-            }, 20000);
-        });
-        onEnd = window.SteamClient?.Apps?.RegisterForGameActionEnd?.(() => {
-            console.log('[friends-activity-bubble] (global) GameActionEnd — clearing launching state');
-            _clearLaunching();
-        });
-    } catch (err) {
-        console.warn('[friends-activity-bubble] RegisterForGameActionStart/End unavailable:', err);
-    }
-    return () => {
-        try { onStart?.unregister?.(); } catch (_err) { /* ignore */ }
-        try { onEnd?.unregister?.(); } catch (_err) { /* ignore */ }
-        if (_launchingSafetyTimer) { clearTimeout(_launchingSafetyTimer); _launchingSafetyTimer = null; }
-    };
-};
-
-const useIsGameLaunching = (appid) => {
-    const [, forceRender] = SP_REACT.useReducer((c) => c + 1, 0);
-    SP_REACT.useEffect(() => {
-        const listener = () => forceRender();
-        _launchListeners.add(listener);
-        return () => { _launchListeners.delete(listener); };
-    }, []);
-    return appid != null && _launchingAppid === appid;
 };
 
 // ─── Settings Panel (Quick Access Menu) ────────────────────────────────────
@@ -262,6 +204,9 @@ const bubbleStyle = (SP_REACT.createElement("style", null, `
     .fab-bubble-root[data-position='top-right'] { top: var(--fab-offset-y); right: var(--fab-offset-x); }
     .fab-bubble-root[data-position='top-left'] { top: var(--fab-offset-y); left: var(--fab-offset-x); }
     .fab-bubble-root[data-position='top-center'] { top: var(--fab-offset-y); left: 50%; transform: translateX(calc(-50% + var(--fab-offset-x))); }
+    .fab-bubble-root[data-position='bottom-right'] { bottom: var(--fab-offset-y); right: var(--fab-offset-x); }
+    .fab-bubble-root[data-position='bottom-left'] { bottom: var(--fab-offset-y); left: var(--fab-offset-x); }
+    .fab-bubble-root[data-position='bottom-center'] { bottom: var(--fab-offset-y); left: 50%; transform: translateX(calc(-50% + var(--fab-offset-x))); }
 
     .fab-card {
       width: 190px;
@@ -339,11 +284,9 @@ const FriendsActivityBubble = () => {
     const { position, horizontalOffset, verticalOffset, maxFriends } = settings;
     const rootRef = SP_REACT.useRef(null);
     const scrolledDown = useScrolledDown(rootRef);
-    const isLaunching = useIsGameLaunching(Number.isNaN(numericAppid) ? undefined : numericAppid);
 
     if (!numericAppid) return SP_REACT.createElement(SP_REACT.Fragment, null);
     if (scrolledDown) return SP_REACT.createElement(SP_REACT.Fragment, null);
-    if (isLaunching) return SP_REACT.createElement(SP_REACT.Fragment, null);
     if (friends.length === 0) return SP_REACT.createElement(SP_REACT.Fragment, null);
 
     const shown = friends.slice(0, maxFriends);
@@ -458,14 +401,12 @@ function patchLibraryApp() {
 
 var index = DFL.definePlugin(() => {
     const libraryPatch = patchLibraryApp();
-    const unregisterGameActionTracking = registerGameActionTracking();
     return {
         title: SP_REACT.createElement("div", { className: DFL.staticClasses.Title }, "Friends Activity Bubble"),
         icon: SP_REACT.createElement(FriendsIcon, null),
         content: SP_REACT.createElement(FriendsActivityErrorBoundary, null, SP_REACT.createElement(SettingsPanel, null)),
         onDismount() {
             routerHook.removePatch('/library/app/:appid', libraryPatch);
-            unregisterGameActionTracking();
         }
     };
 });

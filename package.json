@@ -1,12 +1,12 @@
 {
   "name": "friends-activity-bubble",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Floating \"Friends recently played\" bubble over Clean GameView hero art",
   "type": "module",
   "scripts": {
     "test": "echo \"no build step, dist/index.js is hand-written plain JS\" && exit 0"
   },
-  "author": "bloodshine",
+  "author": "Axel",
   "license": "GPL-2.0-or-later",
   "dependencies": {
     "@decky/api": "^1.1.2"
