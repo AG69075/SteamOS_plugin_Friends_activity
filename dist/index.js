@@ -274,6 +274,86 @@ const useScrolledDown = (rootRef) => {
     return scrolled;
 };
 
+// ─── Game-launch hiding (same confirmed pattern as steam-achievements) ────
+// Registered once at plugin mount, never inside a per-instance component,
+// since components remount frequently via route patches and would miss
+// events. A safety timeout auto-clears state in case GameActionEnd never
+// fires (observed on some SteamOS versions).
+
+let _launchingAppid = undefined;
+const _launchListeners = new Set();
+const _notifyLaunchListeners = () => { _launchListeners.forEach((fn) => fn()); };
+let _launchSafetyTimeout = null;
+
+const _setLaunchingAppid = (appid) => {
+    _launchingAppid = appid;
+    _notifyLaunchListeners();
+    if (_launchSafetyTimeout) clearTimeout(_launchSafetyTimeout);
+    if (appid !== undefined) {
+        _launchSafetyTimeout = setTimeout(() => {
+            console.warn('[friends-activity-bubble] launch safety timeout hit, clearing launching state.');
+            _setLaunchingAppid(undefined);
+        }, 20000);
+    }
+};
+
+const useIsGameLaunching = (appid) => {
+    const [, forceRender] = SP_REACT.useReducer((x) => x + 1, 0);
+    SP_REACT.useEffect(() => {
+        const handler = () => forceRender();
+        _launchListeners.add(handler);
+        return () => { _launchListeners.delete(handler); };
+    }, []);
+    return appid !== undefined && _launchingAppid === appid;
+};
+
+function registerGameLaunchTracking() {
+    let unregisterActionStart;
+    let unregisterActionEnd;
+    let unregisterLifetime;
+
+    try {
+        unregisterActionStart = window.SteamClient?.Apps?.RegisterForGameActionStart?.(
+            (_actionType, strAppId, actionName) => {
+                if (actionName === 'LaunchApp') {
+                    _setLaunchingAppid(parseInt(strAppId, 10));
+                }
+            }
+        );
+    } catch (err) {
+        console.error('[friends-activity-bubble] RegisterForGameActionStart failed:', err);
+    }
+
+    try {
+        unregisterActionEnd = window.SteamClient?.Apps?.RegisterForGameActionEnd?.(() => {
+            // strAppId/actionName can come back undefined on some SteamOS
+            // versions — clear unconditionally, matching steam-achievements.
+            _setLaunchingAppid(undefined);
+        });
+    } catch (err) {
+        console.error('[friends-activity-bubble] RegisterForGameActionEnd failed:', err);
+    }
+
+    try {
+        unregisterLifetime = window.SteamClient?.GameSessions?.RegisterForAppLifetimeNotifications?.(
+            (update) => {
+                if (update?.bRunning === true && update?.unAppID === _launchingAppid) {
+                    _setLaunchingAppid(undefined);
+                }
+            }
+        );
+    } catch (err) {
+        console.error('[friends-activity-bubble] RegisterForAppLifetimeNotifications failed:', err);
+    }
+
+    return () => {
+        try { unregisterActionStart?.unregister?.(); } catch (_err) { /* ignore */ }
+        try { unregisterActionEnd?.unregister?.(); } catch (_err) { /* ignore */ }
+        try { unregisterLifetime?.unregister?.(); } catch (_err) { /* ignore */ }
+        if (_launchSafetyTimeout) clearTimeout(_launchSafetyTimeout);
+    };
+}
+
 // ─── Bubble Component ───────────────────────────────────────────────────────
 
 const FriendsActivityBubble = () => {
@@ -284,8 +364,10 @@ const FriendsActivityBubble = () => {
     const { position, horizontalOffset, verticalOffset, maxFriends } = settings;
     const rootRef = SP_REACT.useRef(null);
     const scrolledDown = useScrolledDown(rootRef);
+    const isLaunching = useIsGameLaunching(numericAppid);
 
     if (!numericAppid) return SP_REACT.createElement(SP_REACT.Fragment, null);
+    if (isLaunching) return SP_REACT.createElement(SP_REACT.Fragment, null);
     if (scrolledDown) return SP_REACT.createElement(SP_REACT.Fragment, null);
     if (friends.length === 0) return SP_REACT.createElement(SP_REACT.Fragment, null);
 
@@ -401,12 +483,14 @@ function patchLibraryApp() {
 
 var index = DFL.definePlugin(() => {
     const libraryPatch = patchLibraryApp();
+    const unregisterLaunchTracking = registerGameLaunchTracking();
     return {
         title: SP_REACT.createElement("div", { className: DFL.staticClasses.Title }, "Friends Activity Bubble"),
         icon: SP_REACT.createElement(FriendsIcon, null),
         content: SP_REACT.createElement(FriendsActivityErrorBoundary, null, SP_REACT.createElement(SettingsPanel, null)),
         onDismount() {
             routerHook.removePatch('/library/app/:appid', libraryPatch);
+            unregisterLaunchTracking();
         }
     };
 });

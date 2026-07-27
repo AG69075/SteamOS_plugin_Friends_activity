@@ -1,6 +1,6 @@
 {
   "name": "friends-activity-bubble",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Floating \"Friends recently played\" bubble over Clean GameView hero art",
   "type": "module",
   "scripts": {
