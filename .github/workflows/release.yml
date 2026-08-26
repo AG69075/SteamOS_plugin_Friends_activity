@@ -26,13 +26,15 @@ jobs:
 
       - name: Package plugin zip
         run: |
+          ZIP_NAME="SteamOS_plugin_Friends-activity_${GITHUB_REF_NAME}.zip"
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
           mkdir -p /tmp/pkg/friends-activity-bubble
           cp -r dist main.py plugin.json package.json README.md /tmp/pkg/friends-activity-bubble/
           cd /tmp/pkg
-          zip -r friends-activity-bubble.zip friends-activity-bubble
-          mv friends-activity-bubble.zip "$GITHUB_WORKSPACE/friends-activity-bubble.zip"
+          zip -r "$ZIP_NAME" friends-activity-bubble
+          mv "$ZIP_NAME" "$GITHUB_WORKSPACE/$ZIP_NAME"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: friends-activity-bubble.zip
+          files: ${{ env.ZIP_NAME }}
