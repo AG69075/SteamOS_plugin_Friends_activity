@@ -18,7 +18,7 @@ A Decky Loader plugin that shows a floating "Friends who played" bubble over the
 
 ## Installation
 
-**From a release:** download `friends-activity-bubble.zip` from the [Releases](../../releases) page and install via Decky Loader → **Developer** → **Install Plugin from ZIP file** (uninstall the previous version first if you're updating).
+**From a release:** download the `SteamOS_Friends_activity` zip from the [Releases](../../releases) page and install via Decky Loader → **Developer** → **Install Plugin from ZIP file** (uninstall the previous version first if you're updating).
 
 **From source:**
 ```bash

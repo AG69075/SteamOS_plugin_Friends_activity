@@ -10,7 +10,7 @@ class Plugin:
     """
 
     async def _main(self) -> None:
-        decky_plugin.logger.info("friends-activity-bubble backend loaded (no-op).")
+        decky_plugin.logger.info("SteamOS_Friends_activity backend loaded (no-op).")
 
     async def _unload(self) -> None:
         pass

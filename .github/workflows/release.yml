@@ -28,10 +28,10 @@ jobs:
         run: |
           ZIP_NAME="SteamOS_plugin_Friends-activity_${GITHUB_REF_NAME}.zip"
           echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
-          mkdir -p /tmp/pkg/friends-activity-bubble
-          cp -r dist main.py plugin.json package.json README.md /tmp/pkg/friends-activity-bubble/
+          mkdir -p /tmp/pkg/SteamOS_Friends_activity
+          cp -r dist main.py plugin.json package.json README.md /tmp/pkg/SteamOS_Friends_activity/
           cd /tmp/pkg
-          zip -r "$ZIP_NAME" friends-activity-bubble
+          zip -r "$ZIP_NAME" SteamOS_Friends_activity
           mv "$ZIP_NAME" "$GITHUB_WORKSPACE/$ZIP_NAME"
 
       - name: Create GitHub Release
