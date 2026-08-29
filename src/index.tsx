@@ -162,7 +162,7 @@ const SettingsPanel: FC = () => {
           label="Max friends shown"
           value={settings.maxFriends}
           min={1}
-          max={8}
+          max={10}
           step={1}
           onChange={(val: number) => setSetting({ maxFriends: val })}
         />
