@@ -144,6 +144,7 @@ const SettingsPanel: FC = () => {
           min={-300}
           max={300}
           step={4}
+          showValue
           onChange={(val: number) => setSetting({ horizontalOffset: val })}
         />
       </PanelSectionRow>
@@ -154,6 +155,7 @@ const SettingsPanel: FC = () => {
           min={0}
           max={900}
           step={8}
+          showValue
           onChange={(val: number) => setSetting({ verticalOffset: val })}
         />
       </PanelSectionRow>
@@ -164,6 +166,10 @@ const SettingsPanel: FC = () => {
           min={1}
           max={10}
           step={1}
+          showValue
+          editableValue
+          notchCount={10}
+          notchTicksVisible
           onChange={(val: number) => setSetting({ maxFriends: val })}
         />
       </PanelSectionRow>
