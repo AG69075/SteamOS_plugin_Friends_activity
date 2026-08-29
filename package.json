@@ -1,6 +1,6 @@
 {
   "name": "friends-activity-bubble",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Floating \"Friends who played\" bubble over the app-details hero art, Clean GameView compatible",
   "type": "module",
   "scripts": {

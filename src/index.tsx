@@ -164,11 +164,11 @@ const SettingsPanel: FC = () => {
           label="Max friends shown"
           value={settings.maxFriends}
           min={1}
-          max={10}
+          max={14}
           step={1}
           showValue
           editableValue
-          notchCount={10}
+          notchCount={14}
           notchTicksVisible
           onChange={(val: number) => setSetting({ maxFriends: val })}
         />
