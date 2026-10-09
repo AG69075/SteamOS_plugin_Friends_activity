@@ -1,6 +1,6 @@
 {
   "name": "steamos_friends_activity",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Floating \"Friends who played\" bubble over the app-details hero art, Clean GameView compatible",
   "type": "module",
   "scripts": {
