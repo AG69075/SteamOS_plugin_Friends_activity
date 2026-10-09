@@ -120,7 +120,7 @@ const useSettings = () => {
 // ─── Settings Panel (Quick Access Menu) ────────────────────────────────────
 
 const hasApiKeyCall = callable<[], boolean>("has_api_key");
-const setApiKeyCall = callable<[string], boolean>("set_api_key");
+const setApiKeyCall = callable<[string], string>("set_api_key");
 const achievementsCall = callable<[number, string[]], string[]>("get_friends_with_achievements");
 
 const SettingsPanel: FC = () => {
@@ -129,11 +129,22 @@ const SettingsPanel: FC = () => {
   const [keySaved, setKeySaved] = useState(false);
   const [keyStatus, setKeyStatus] = useState("");
   const saveKey = () => {
+    setKeyStatus("Checking...");
     setApiKeyCall(keyDraft)
-      .then((ok) => {
-        setKeySaved(ok);
-        setKeyDraft("");
-        setKeyStatus(ok ? "Saved \u2713" : "Failed to save");
+      .then((result) => {
+        if (result === "valid" || result === "unverified") {
+          setKeySaved(true);
+          setKeyDraft("");
+        }
+        setKeyStatus(
+          result === "valid"
+            ? "Valid \u2713 (saved)"
+            : result === "unverified"
+              ? "Saved, but Steam is unreachable so the key was not verified"
+              : result === "invalid"
+                ? "Invalid key \u2717 (not saved)"
+                : "Enter a key first",
+        );
       })
       .catch((err: unknown) => {
         console.error("[friends-activity-bubble] set_api_key failed:", err);
