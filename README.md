@@ -13,12 +13,7 @@ A Decky Loader plugin that shows a floating "Friends who played" bubble over the
 
 ## Friends with private playtime
 
-`GetFriendsWhoPlay` skips friends who hide their playtime. For the remaining friends the plugin checks their achievements on the game:
-
-1. `SteamClient.Apps.GetFriendAchievementsForApp(appid, id64)` — goes through your logged-in Steam client, so friends-only data is visible. No setup needed.
-2. Optional fallback: if you enter a Steam Web API key (free, https://steamcommunity.com/dev/apikey) in the plugin panel, the backend also queries `ISteamUserStats/GetPlayerAchievements`. The Web API only sees **public** profiles. The key is stored locally and only sent to `api.steampowered.com`.
-
-Results are cached for 30 minutes. Friends with at least one unlocked achievement are added to the bubble.
+`GetFriendsWhoPlay` skips friends who hide their playtime. For the remaining friends the plugin calls `SteamClient.Apps.GetFriendAchievementsForApp(appid, id64)`, which goes through your logged-in Steam client (so friends-only data is visible, no API key needed), and adds those with at least one unlocked achievement to the bubble. Results are cached for 30 minutes.
 
 ## Known limitations
 

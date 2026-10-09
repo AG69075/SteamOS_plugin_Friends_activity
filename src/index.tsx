@@ -1,11 +1,10 @@
-import { definePlugin, routerHook, callable } from "@decky/api";
+import { definePlugin, routerHook } from "@decky/api";
 import {
   PanelSection,
   PanelSectionRow,
   ButtonItem,
   Field,
   SliderField,
-  TextField,
   staticClasses,
   appDetailsClasses,
   findInReactTree,
@@ -119,43 +118,8 @@ const useSettings = () => {
 
 // ─── Settings Panel (Quick Access Menu) ────────────────────────────────────
 
-const hasApiKeyCall = callable<[], boolean>("has_api_key");
-const setApiKeyCall = callable<[string], string>("set_api_key");
-const achievementsCall = callable<[number, string[]], string[]>("get_friends_with_achievements");
-
 const SettingsPanel: FC = () => {
   const { settings, setSetting } = useSettings();
-  const [keyDraft, setKeyDraft] = useState("");
-  const [keySaved, setKeySaved] = useState(false);
-  const [keyStatus, setKeyStatus] = useState("");
-  const saveKey = () => {
-    setKeyStatus("Checking...");
-    setApiKeyCall(keyDraft)
-      .then((result) => {
-        if (result === "valid" || result === "unverified") {
-          setKeySaved(true);
-          setKeyDraft("");
-        }
-        setKeyStatus(
-          result === "valid"
-            ? "Valid \u2713 (saved)"
-            : result === "unverified"
-              ? "Saved, but Steam is unreachable so the key was not verified"
-              : result === "invalid"
-                ? "Invalid key \u2717 (not saved)"
-                : "Enter a key first",
-        );
-      })
-      .catch((err: unknown) => {
-        console.error("[friends-activity-bubble] set_api_key failed:", err);
-        setKeyStatus("Failed to save");
-      });
-  };
-  useEffect(() => {
-    hasApiKeyCall()
-      .then(setKeySaved)
-      .catch(() => setKeySaved(false));
-  }, []);
   const posIdx = POSITION_OPTIONS.findIndex((o) => o.value === settings.position);
 
   return (
@@ -208,24 +172,6 @@ const SettingsPanel: FC = () => {
           notchTicksVisible
           onChange={(val: number) => setSetting({ maxFriends: val })}
         />
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <TextField
-          label="Steam API key"
-          description="Optional fallback (public profiles only) for friends with private playtime. Get a free key at steamcommunity.com/dev/apikey"
-          value={keyDraft}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setKeyDraft(e.target.value)}
-        />
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <ButtonItem layout="below" disabled={!keyDraft.trim()} onClick={saveKey}>
-          Save API key
-        </ButtonItem>
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <Field label="API key status">
-          {keyStatus || (keySaved ? "Saved" : "Not set")}
-        </Field>
       </PanelSectionRow>
     </PanelSection>
   );
@@ -301,11 +247,8 @@ const fetchFriendsWhoPlay = async (appid: number): Promise<FriendEntry[]> => {
 };
 
 // Friends with private playtime are missing from GetFriendsWhoPlay, but their
-// achievements can still be readable. Two sources, merged:
-//   1. SteamClient.Apps.GetFriendAchievementsForApp(appid, id64): goes through
-//      the logged-in client session, so friends-only data is visible. No key.
-//   2. Backend call to the Steam Web API (only public data, needs the user's
-//      API key) — a fallback, returns [] if no key is configured.
+// achievements can still be readable: SteamClient.Apps.GetFriendAchievementsForApp
+// goes through the logged-in client session, so friends-only data is visible.
 
 const ACH_CACHE_TTL_MS = 30 * 60 * 1000;
 const ACH_CONCURRENCY = 6;
@@ -360,12 +303,6 @@ const fetchFriendsWithAchievements = async (appid: number, exclude: Set<string>)
         }
       };
       await Promise.all(Array.from({ length: ACH_CONCURRENCY }, worker));
-    }
-
-    try {
-      (await achievementsCall(appid, candidates.filter((id) => !found.has(id)))).forEach((id) => found.add(id));
-    } catch (_err) {
-      /* backend/web fallback is best-effort */
     }
 
     return [...found].map((id64) => {
