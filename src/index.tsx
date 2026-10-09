@@ -127,6 +127,19 @@ const SettingsPanel: FC = () => {
   const { settings, setSetting } = useSettings();
   const [keyDraft, setKeyDraft] = useState("");
   const [keySaved, setKeySaved] = useState(false);
+  const [keyStatus, setKeyStatus] = useState("");
+  const saveKey = () => {
+    setApiKeyCall(keyDraft)
+      .then((ok) => {
+        setKeySaved(ok);
+        setKeyDraft("");
+        setKeyStatus(ok ? "Saved \u2713" : "Failed to save");
+      })
+      .catch((err: unknown) => {
+        console.error("[friends-activity-bubble] set_api_key failed:", err);
+        setKeyStatus("Failed to save");
+      });
+  };
   useEffect(() => {
     hasApiKeyCall()
       .then(setKeySaved)
@@ -187,20 +200,21 @@ const SettingsPanel: FC = () => {
       </PanelSectionRow>
       <PanelSectionRow>
         <TextField
-          label={keySaved ? "Steam API key (saved)" : "Steam API key"}
+          label="Steam API key"
           description="Lets the bubble also show friends with private playtime who have achievements. Get a free key at steamcommunity.com/dev/apikey"
           value={keyDraft}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setKeyDraft(e.target.value)}
-          onBlur={() => {
-            if (!keyDraft.trim()) return;
-            setApiKeyCall(keyDraft)
-              .then((ok) => {
-                setKeySaved(ok);
-                setKeyDraft("");
-              })
-              .catch((err: unknown) => console.error("[friends-activity-bubble] set_api_key failed:", err));
-          }}
         />
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={!keyDraft.trim()} onClick={saveKey}>
+          Save API key
+        </ButtonItem>
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <Field label="API key status">
+          {keyStatus || (keySaved ? "Saved" : "Not set")}
+        </Field>
       </PanelSectionRow>
     </PanelSection>
   );
