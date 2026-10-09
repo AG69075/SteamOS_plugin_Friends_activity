@@ -212,7 +212,7 @@ const SettingsPanel: FC = () => {
       <PanelSectionRow>
         <TextField
           label="Steam API key"
-          description="Lets the bubble also show friends with private playtime who have achievements. Get a free key at steamcommunity.com/dev/apikey"
+          description="Optional fallback (public profiles only) for friends with private playtime. Get a free key at steamcommunity.com/dev/apikey"
           value={keyDraft}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setKeyDraft(e.target.value)}
         />
@@ -301,17 +301,74 @@ const fetchFriendsWhoPlay = async (appid: number): Promise<FriendEntry[]> => {
 };
 
 // Friends with private playtime are missing from GetFriendsWhoPlay, but their
-// achievements can still be readable. The backend checks them via the Steam
-// Web API (needs the user's API key) — returns [] if no key is configured.
+// achievements can still be readable. Two sources, merged:
+//   1. SteamClient.Apps.GetFriendAchievementsForApp(appid, id64): goes through
+//      the logged-in client session, so friends-only data is visible. No key.
+//   2. Backend call to the Steam Web API (only public data, needs the user's
+//      API key) — a fallback, returns [] if no key is configured.
+
+const ACH_CACHE_TTL_MS = 30 * 60 * 1000;
+const ACH_CONCURRENCY = 6;
+const ACH_CALL_TIMEOUT_MS = 6000;
+const _clientAchCache = new Map<string, { at: number; has: boolean }>();
+
+const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("timeout")), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+
+const friendHasAchievementsViaClient = async (appid: number, id64: string): Promise<boolean> => {
+  const cacheKey = `${appid}:${id64}`;
+  const cached = _clientAchCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < ACH_CACHE_TTL_MS) return cached.has;
+  try {
+    const res: any = await withTimeout(window.SteamClient.Apps.GetFriendAchievementsForApp(String(appid), id64), ACH_CALL_TIMEOUT_MS);
+    const has = !!res?.data?.rgAchievements?.some((a: any) => a?.bAchieved);
+    _clientAchCache.set(cacheKey, { at: Date.now(), has });
+    return has;
+  } catch (_err) {
+    return false; // not cached: may succeed on a later attempt
+  }
+};
+
 const fetchFriendsWithAchievements = async (appid: number, exclude: Set<string>): Promise<FriendEntry[]> => {
   try {
     const all: any[] = window.friendStore?.allFriends ?? [];
-    const candidates = all
+    const candidates: string[] = all
       .map((f: any) => (typeof f?.m_unAccountID === "number" ? (STEAM_ID64_BASE + BigInt(f.m_unAccountID)).toString() : ""))
       .filter((id: string) => id && !exclude.has(id));
     if (candidates.length === 0) return [];
-    const found = await achievementsCall(appid, candidates);
-    return (found ?? []).map((id64) => {
+
+    const found = new Set<string>();
+
+    if (window.SteamClient?.Apps?.GetFriendAchievementsForApp) {
+      let next = 0;
+      const worker = async () => {
+        while (next < candidates.length) {
+          const id64 = candidates[next++];
+          if (await friendHasAchievementsViaClient(appid, id64)) found.add(id64);
+        }
+      };
+      await Promise.all(Array.from({ length: ACH_CONCURRENCY }, worker));
+    }
+
+    try {
+      (await achievementsCall(appid, candidates.filter((id) => !found.has(id)))).forEach((id) => found.add(id));
+    } catch (_err) {
+      /* backend/web fallback is best-effort */
+    }
+
+    return [...found].map((id64) => {
       const accountId = steamId64ToAccountId(id64);
       const friend = accountId !== undefined ? lookupFriend(accountId) : undefined;
       return { id: id64, name: friend?.display_name || "Friend", avatar: friend?.persona?.avatar_url };
