@@ -1,10 +1,11 @@
-import { definePlugin, routerHook } from "@decky/api";
+import { definePlugin, routerHook, callable } from "@decky/api";
 import {
   PanelSection,
   PanelSectionRow,
   ButtonItem,
   Field,
   SliderField,
+  TextField,
   staticClasses,
   appDetailsClasses,
   findInReactTree,
@@ -118,8 +119,19 @@ const useSettings = () => {
 
 // ─── Settings Panel (Quick Access Menu) ────────────────────────────────────
 
+const hasApiKeyCall = callable<[], boolean>("has_api_key");
+const setApiKeyCall = callable<[string], boolean>("set_api_key");
+const achievementsCall = callable<[number, string[]], string[]>("get_friends_with_achievements");
+
 const SettingsPanel: FC = () => {
   const { settings, setSetting } = useSettings();
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keySaved, setKeySaved] = useState(false);
+  useEffect(() => {
+    hasApiKeyCall()
+      .then(setKeySaved)
+      .catch(() => setKeySaved(false));
+  }, []);
   const posIdx = POSITION_OPTIONS.findIndex((o) => o.value === settings.position);
 
   return (
@@ -173,6 +185,23 @@ const SettingsPanel: FC = () => {
           onChange={(val: number) => setSetting({ maxFriends: val })}
         />
       </PanelSectionRow>
+      <PanelSectionRow>
+        <TextField
+          label={keySaved ? "Steam API key (saved)" : "Steam API key"}
+          description="Lets the bubble also show friends with private playtime who have achievements. Get a free key at steamcommunity.com/dev/apikey"
+          value={keyDraft}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setKeyDraft(e.target.value)}
+          onBlur={() => {
+            if (!keyDraft.trim()) return;
+            setApiKeyCall(keyDraft)
+              .then((ok) => {
+                setKeySaved(ok);
+                setKeyDraft("");
+              })
+              .catch((err: unknown) => console.error("[friends-activity-bubble] set_api_key failed:", err));
+          }}
+        />
+      </PanelSectionRow>
     </PanelSection>
   );
 };
@@ -204,6 +233,8 @@ declare global {
   }
 }
 
+const STEAM_ID64_BASE = 76561197960265728n;
+
 const steamId64ToAccountId = (id64: string): number | undefined => {
   try {
     return Number(BigInt(id64) & 0xffffffffn);
@@ -231,7 +262,7 @@ const fetchFriendsWhoPlay = async (appid: number): Promise<FriendEntry[]> => {
   }
   if (!Array.isArray(ids)) return [];
 
-  return ids.map((id64) => {
+  const toEntry = (id64: string): FriendEntry => {
     const accountId = steamId64ToAccountId(id64);
     const friend = accountId !== undefined ? lookupFriend(accountId) : undefined;
     return {
@@ -239,7 +270,31 @@ const fetchFriendsWhoPlay = async (appid: number): Promise<FriendEntry[]> => {
       name: friend?.display_name || "Friend",
       avatar: friend?.persona?.avatar_url,
     };
-  });
+  };
+
+  return ids.map(toEntry);
+};
+
+// Friends with private playtime are missing from GetFriendsWhoPlay, but their
+// achievements can still be readable. The backend checks them via the Steam
+// Web API (needs the user's API key) — returns [] if no key is configured.
+const fetchFriendsWithAchievements = async (appid: number, exclude: Set<string>): Promise<FriendEntry[]> => {
+  try {
+    const all: any[] = window.friendStore?.allFriends ?? [];
+    const candidates = all
+      .map((f: any) => (typeof f?.m_unAccountID === "number" ? (STEAM_ID64_BASE + BigInt(f.m_unAccountID)).toString() : ""))
+      .filter((id: string) => id && !exclude.has(id));
+    if (candidates.length === 0) return [];
+    const found = await achievementsCall(appid, candidates);
+    return (found ?? []).map((id64) => {
+      const accountId = steamId64ToAccountId(id64);
+      const friend = accountId !== undefined ? lookupFriend(accountId) : undefined;
+      return { id: id64, name: friend?.display_name || "Friend", avatar: friend?.persona?.avatar_url };
+    });
+  } catch (err) {
+    console.error("[friends-activity-bubble] achievements lookup failed:", err);
+    return [];
+  }
 };
 
 const useFriendsWhoPlay = (appid?: number): FriendEntry[] => {
@@ -251,10 +306,14 @@ const useFriendsWhoPlay = (appid?: number): FriendEntry[] => {
       return;
     }
     fetchFriendsWhoPlay(appid).then((list) => {
-      if (!cancelled) {
-        console.log(`[friends-activity-bubble] friends who play appid ${appid}:`, list);
-        setFriends(list);
-      }
+      if (cancelled) return;
+      console.log(`[friends-activity-bubble] friends who play appid ${appid}:`, list);
+      setFriends(list);
+      fetchFriendsWithAchievements(appid, new Set(list.map((f) => f.id))).then((extra) => {
+        if (cancelled || extra.length === 0) return;
+        console.log(`[friends-activity-bubble] friends with achievements on appid ${appid}:`, extra);
+        setFriends([...list, ...extra]);
+      });
     });
     return () => {
       cancelled = true;
